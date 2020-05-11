@@ -1,5 +1,10 @@
 import math
 import struct
+import idaapi
+import idc
+import ida_bytes
+import ida_netnode
+import ida_segment
 
 def shortBytesRepr(data, maxLen=None):
     """
@@ -359,6 +364,9 @@ def save(root):
 
     return fnt
 
+def err(owo):
+    if (owo == 0):
+        raise Exception("owo)")
 
 ICON_BANNER_LEN = 0x840
 
@@ -398,6 +406,10 @@ class NintendoDSRom:
         self.region = 0
         self.version = 0
         self.autostart = 0
+        self.arm7Len = 0
+        self.arm9Len = 0
+        self.arm7Offset = 0
+        self.arm9Offset = 0
         self.arm9EntryAddress = 0x2000800
         self.arm9RamAddress = 0x2000000
         self.arm7EntryAddress = 0x2380000
@@ -489,14 +501,14 @@ class NintendoDSRom:
         self.version = read8()
         self.autostart = read8()
         assert self.headerOffset == 0x20, '(Load) Header offset check at 0x20: ' + hex(self.headerOffset)
-        arm9Offset = read32()
+        self.arm9Offset = read32()
         self.arm9EntryAddress = read32()
         self.arm9RamAddress = read32()
-        arm9Len = read32()
-        arm7Offset = read32()
+        self.arm9Len = read32()
+        self.arm7Offset = read32()
         self.arm7EntryAddress = read32()
         self.arm7RamAddress = read32()
-        arm7Len = read32()
+        self.arm7Len = read32()
         assert self.headerOffset == 0x40, '(Load) Header offset check at 0x40: ' + hex(self.headerOffset)
         fntOffset = read32()
         fntLen = read32()
@@ -530,7 +542,7 @@ class NintendoDSRom:
         self.debugRomAddress = read32()
         self.pad16C = readRaw(0x94)
         assert self.headerOffset == 0x200, '(Load) Header offset check at 0x200: ' + hex(self.headerOffset)
-        self.pad200 = data[0x200 : min(arm9Offset, len(data))]
+        self.pad200 = data[0x200 : min(self.arm9Offset, len(data))]
 
         # Read the RSA signature file
         realSigOffset = 0
@@ -543,8 +555,8 @@ class NintendoDSRom:
             self.rsaSignature = data[realSigOffset : min(len(data), realSigOffset + 0x88)]
 
         # Read arm9, arm7, FNT, FAT, overlay tables, icon banner
-        self.arm9 = data[arm9Offset : arm9Offset+arm9Len]
-        self.arm7 = data[arm7Offset : arm7Offset+arm7Len]
+        self.arm9 = data[self.arm9Offset : self.arm9Offset+self.arm9Len]
+        self.arm7 = data[self.arm7Offset : self.arm7Offset+self.arm7Len]
         fnt = data[fntOffset : fntOffset+fntLen]
         fat = data[fatOffset : fatOffset+fatLen]
         self.arm9OverlayTable = data[
@@ -566,7 +578,7 @@ class NintendoDSRom:
         # No idea what this is, though...
         # Probably related to the "code settings" stuff in code.py.
         arm9PostData = bytearray()
-        arm9PostDataOffset = arm9Offset+arm9Len
+        arm9PostDataOffset = self.arm9Offset+self.arm9Len
         while (data[arm9PostDataOffset:arm9PostDataOffset+4]
                 == b'\x21\x06\xC0\xDE'):
             arm9PostData.extend(data[arm9PostDataOffset:arm9PostDataOffset+12])
@@ -670,17 +682,91 @@ class NintendoDSRom:
 
         return type(self).__name__
 
+def memset_seg(ea, size):
+	for i in xrange(0, size):
+		idc.PatchByte(ea + i, 0)
 
-ndsRom = NintendoDSRom()
 
 def accept_file(li, n):
-    print("uwu" + str(li.size()));
     ndsRom = NintendoDSRom(li.read(li.size()))
     if ((ndsRom.name != b'')):
-        return "nds.py: Nintendo DS (" + str(ndsRom.name) + ")"
+        return "Nintendo DS (" + str(ndsRom.name) + ")"
     return 0
 
 def load_file(li, neflags, format):
+    li.seek(0)
+    ndsRom = NintendoDSRom(li.read(li.size()))
     retval = 1
 
-    return retval
+    useArm9 = ask_yn(1, "This ROM potentially contains both ARM9 and ARM7 code\nDo you want to load the ARM9 binary?")
+    if (useArm9 == -1):
+        useArm9 = 0
+    
+    useArm9 = bool(useArm9)
+
+    proc = ""
+    startEA = 0
+    endEA = 0
+    offset = 0
+    entryAddr = 0
+    size = 0
+    name = ""
+    rom = ""
+    if (useArm9):
+        name = "ARM9 ROM"
+        proc = "ARM"
+        entryAddr = ndsRom.arm9EntryAddress
+        startEA = ndsRom.arm9RamAddress
+        endEA = ndsRom.arm9RamAddress + ndsRom.arm9Len
+        offset = ndsRom.arm9Offset
+        size = ndsRom.arm9Len
+        rom = ndsRom.arm9
+    else:
+        name = "ARM7 ROM"
+        proc = "ARM710A"
+        entryAddr = ndsRom.arm7EntryAddress
+        startEA = ndsRom.arm7RamAddress
+        endEA = ndsRom.arm7RamAddress + ndsRom.arm7Len
+        offset = ndsRom.arm7Offset
+        size = ndsRom.arm7Len
+        rom = ndsRom.arm7
+
+    memory =  \
+    [
+        [ 0x02000000, 0x02800000, "SEG1" ],
+        [ 0x037F8000, 0x037FFFFF, "SEG2" ],
+        [ 0x03800000, 0x0380FFFF, "SEG3" ],
+    ]
+
+    if ((startEA < memory[0][0] or endEA > memory[0][1]) and (startEA < memory[1][0] or endEA > memory[1][1]) and (startEA < memory[2][0] or endEA > memory[2][1])):
+        raise Exception("Not mapped into valid mem!")
+
+    idaapi.set_processor_type(proc, idaapi.SETPROC_LOADER_NON_FATAL|idaapi.SETPROC_LOADER)
+    idaapi.add_entry(entryAddr, entryAddr, "start", 1)
+    idc.MakeNameEx(entryAddr, "Entry", idc.SN_NOCHECK | idc.SN_NOWARN)
+    idaapi.cvar.inf.startIP = entryAddr
+    idaapi.cvar.inf.beginEA = entryAddr
+    ida_segment.set_selector(1, 0)
+    idaapi.cvar.inf.startCS = 1
+
+    for segment in memory:
+        idc.AddSeg(segment[0], segment[1], 0, 1, idaapi.saRelPara, idaapi.scPub)
+        idc.RenameSeg(segment[0], segment[2])
+        #memset_seg(segment[0], segment[1] - segment[0])
+        idc.SetSegmentType(segment[0], idc.SEG_CODE)
+    
+    li.seek(0)
+    li.file2base(offset, startEA, endEA, 1)
+
+
+
+    idaapi.cvar.inf.startCS = 0
+    idaapi.cvar.inf.startIP = entryAddr
+
+    idc.ExtLinA(entryAddr, 1,  "; Title : " + str(ndsRom.name))
+    idc.ExtLinA(entryAddr, 1,  "; Software Version: " + str(ndsRom.version))
+
+    # Add TwlHdr
+
+    print("Done! Entry point @ " + hex(entryAddr))
+    return 1
