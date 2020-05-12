@@ -447,6 +447,7 @@ class NintendoDSRom:
         self.filenames = Folder()
         self.files = []
         self.sortedFileIds = []
+        self.romSizeOrRsaSigOffset = 0
 
     
     def _initFromData(self, data):
@@ -530,7 +531,7 @@ class NintendoDSRom:
         self.arm7CodeSettingsPointerAddress = read32()
         self.secureAreaDisable = readRaw(8)
         assert self.headerOffset == 0x80, '(Load) Header offset check at 0x80: ' + hex(self.headerOffset)
-        romSizeOrRsaSigOffset = read32()
+        self.romSizeOrRsaSigOffset = read32()
         headerSize = read32()
         self.pad088 = readRaw(0x38)
         self.nintendoLogo = readRaw(0x9C)
@@ -548,8 +549,8 @@ class NintendoDSRom:
         realSigOffset = 0
         if len(data) >= 0x1004:
             realSigOffset, = struct.unpack_from('<I', data, 0x1000)
-        if not realSigOffset and len(data) > romSizeOrRsaSigOffset:
-            realSigOffset = romSizeOrRsaSigOffset
+        if not realSigOffset and len(data) > (self.romSizeOrRsaSigOffset):
+            realSigOffset = (self.romSizeOrRsaSigOffset)
         self.rsaSignature = b''
         if realSigOffset:
             self.rsaSignature = data[realSigOffset : min(len(data), realSigOffset + 0x88)]
@@ -843,36 +844,33 @@ def load_file(li, neflags, format):
         size = ndsRom.arm7Len
         rom = ndsRom.arm7
 
+    idaapi.set_processor_type(proc, idaapi.SETPROC_LOADER_NON_FATAL|idaapi.SETPROC_LOADER)
+    
     memory =  \
     [
-        [ 0x02000000, 0x02800000, "SEG1" ],
-        [ 0x037F8000, 0x037FFFFF, "SEG2" ],
-        [ 0x03800000, 0x0380FFFF, "SEG3" ],
-        [ 0x04000000, 0x04001056, "General_Regs"],
-        [ 0x05000000, 0x05000600, "VMEM_Regs"],
+        [ startEA, endEA, "RAM" ],
+        [ 0x04000000, 0x04001056, "General_Regs" ],
+        [ 0x05000000, 0x05000600, "VMEM_Regs" ],
     ]
 
     if ((startEA < memory[0][0] or endEA > memory[0][1]) and (startEA < memory[1][0] or endEA > memory[1][1]) and (startEA < memory[2][0] or endEA > memory[2][1])):
-        raise Exception("Not mapped into valid mem!")
-
-    idaapi.set_processor_type(proc, idaapi.SETPROC_LOADER_NON_FATAL|idaapi.SETPROC_LOADER)
-    idaapi.add_entry(entryAddr, entryAddr, "start", 1)
-    idc.MakeNameEx(entryAddr, "Entry", idc.SN_NOCHECK | idc.SN_NOWARN)
-    idaapi.cvar.inf.startIP = entryAddr
-    idaapi.cvar.inf.beginEA = entryAddr
-    ida_segment.set_selector(1, 0)
-    idaapi.cvar.inf.startCS = 1
+        raise Exception("ROM not mapped into valid mem!")
 
     for segment in memory:
         idc.AddSeg(segment[0], segment[1], 0, 1, idaapi.saRelPara, idaapi.scPub)
         idc.RenameSeg(segment[0], segment[2])
 
-        if "SEG" not in segment[2]:
-            idc.SetSegmentType(segment[0], idc.SEG_DATA)
+        if "RAM" not in segment[2]:
             for i in xrange(segment[0], segment[1]):
 		        idc.PatchByte(i, 0)
-        else:
-            idc.SetSegmentType(segment[0], idc.SEG_CODE)
+    
+    idaapi.add_entry(entryAddr, entryAddr, "start", 1)
+    idc.MakeNameEx(entryAddr, "start", idc.SN_NOCHECK | idc.SN_NOWARN)
+    idaapi.cvar.inf.startIP = entryAddr
+    idaapi.cvar.inf.beginEA = entryAddr
+    ida_segment.set_selector(1, 0)
+    idaapi.cvar.inf.startCS = 1
+    
 
     li.seek(0)
     li.file2base(offset, startEA, endEA, 1)
@@ -880,8 +878,8 @@ def load_file(li, neflags, format):
     idaapi.cvar.inf.startCS = 0
     idaapi.cvar.inf.startIP = entryAddr
     
-    idc.ExtLinA(entryAddr, 1,  "; Title : " + str(ndsRom.name))
-    idc.ExtLinA(entryAddr, 1,  "; Software Version: " + str(ndsRom.version))
+    idc.ExtLinA(startEA, 1,  "; Title : " + str(ndsRom.name))
+    idc.ExtLinA(startEA, 1,  "; Software Version: " + str(ndsRom.version))
 
     # Add TwlHdr
     MakeVideoRegs()
@@ -893,6 +891,6 @@ def load_file(li, neflags, format):
     else:
         MakeARM9Regs()
 
+
     print("Done! Entry point @ " + hex(entryAddr))
     return 1
-
