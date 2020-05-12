@@ -682,10 +682,122 @@ class NintendoDSRom:
 
         return type(self).__name__
 
-def memset_seg(ea, size):
-	for i in xrange(0, size):
-		idc.PatchByte(ea + i, 0)
 
+def MakeReg(name, offset, size, count=0):
+    idc.MakeNameEx(offset, name, idc.SN_NOCHECK | idc.SN_NOWARN)
+    if (size == 1):
+	    idc.MakeByte(offset)
+    elif size == 2:
+        idc.MakeWord(offset)
+    elif size == 4:
+        idc.MakeDword(offset)
+    else:
+        raise NotImplementedError("Register size invalid! Name: " + name)
+        
+    if (count != 0):
+        idc.make_array(offset, count)
+            
+
+"""
+// general memory range defines
+#define		PAL			((u16 *) 0x05000000)
+#define		VRAM1		((u16 *) 0x06000000)
+#define		VRAM2		((u16 *) 0x06200000)
+
+//#define		OAM			((u16 *) 0x07000000)
+#define		CART		((u16 *) 0x08000000)
+"""
+
+def MakeVideoRegs():
+
+    MakeReg("REG_DisplayCnt", 0x04000000, 4)
+    MakeReg("REG_DisplayStatus", 0x04000004, 2)
+    MakeReg("REG_VCount", 0x04000006, 2)
+    MakeReg("REG_BG0CNT", 0x4000008, 2)
+    MakeReg("REG_BG1CNT", 0x400000a, 2)
+    MakeReg("REG_BG2CNT", 0x400000c, 2)
+    MakeReg("REG_BG3CNT", 0x400000e, 2)
+    MakeReg("REG_BG0HOFS", 0x4000010, 2)
+    MakeReg("REG_BG0VOFS", 0x4000012, 2)
+    MakeReg("REG_BG1HOFS", 0x4000014, 2)
+    MakeReg("REG_BG1VOFS", 0x4000016, 2)
+    MakeReg("REG_BG2HOFS", 0x4000018, 2)
+    MakeReg("REG_BG2VOFS", 0x400001a, 2)
+    MakeReg("REG_BG3HOFS", 0x400001c, 2)
+    MakeReg("REG_BG3VOFS", 0x400001e, 2)
+    MakeReg("REG_BG2PA", 0x4000020, 2)
+    MakeReg("REG_BG2PB", 0x4000022, 2)
+    MakeReg("REG_BG2PC", 0x4000024, 2)
+    MakeReg("REG_BG2PD", 0x4000026, 2)
+    MakeReg("REG_BG2X", 0x4000028, 4)
+    MakeReg("REG_BG2Y", 0x400002c, 4)
+    MakeReg("REG_BG3PA", 0x4000030, 2)
+    MakeReg("REG_BG3PB", 0x4000032, 2)
+    MakeReg("REG_BG3PC", 0x4000034, 2)
+    MakeReg("REG_BG3PD", 0x4000036, 2)
+    MakeReg("REG_BG3X", 0x4000038, 4)
+    MakeReg("REG_BG3Y", 0x400003c, 4)
+    MakeReg("REG_WIN0H", 0x4000040, 2)
+    MakeReg("REG_WIN1H", 0x4000042, 2)
+    MakeReg("REG_WIN0V", 0x4000044, 2)
+    MakeReg("REG_WIN1V", 0x4000046, 2)
+    MakeReg("REG_WININ", 0x4000048, 2)
+    MakeReg("REG_WINOUT", 0x400004a, 2)
+    MakeReg("REG_MOSAIC", 0x400004c, 2)
+    MakeReg("REG_BLDCNT", 0x4000050, 2)
+    MakeReg("REG_BLDY", 0x4000054, 2)
+    MakeReg("REG_VCOUNT2", 0x4001006, 2)
+    MakeReg("REG_BG0CNT2", 0x4001008, 2)
+    MakeReg("REG_BG1CNT2", 0x400100a, 2)
+    MakeReg("REG_BG2CNT2", 0x400100c, 2)
+    MakeReg("REG_BG3CNT2", 0x400100e, 2)
+    MakeReg("REG_BG2PA2", 0x4001020, 2)
+    MakeReg("REG_BG2PB2", 0x4001022, 2)
+    MakeReg("REG_BG2PC2", 0x4001024, 2)
+    MakeReg("REG_BG2PD2", 0x4001026, 2)
+    MakeReg("REG_BG2X2", 0x4001028, 4)
+    MakeReg("REG_BG2Y2", 0x400102c, 4)
+    MakeReg("REG_BG3PA2", 0x4001030, 2)
+    MakeReg("REG_BG3PB2", 0x4001032, 2)
+    MakeReg("REG_BG3PC2", 0x4001034, 2)
+    MakeReg("REG_BG3PD2", 0x4001036, 2)
+    MakeReg("REG_BG3X2", 0x4001038, 4)
+    MakeReg("REG_BG3Y2", 0x400103c, 4)
+    MakeReg("REG_WIN0H2", 0x4001040, 2)
+    MakeReg("REG_WIN1H2", 0x4001042, 2)
+    MakeReg("REG_WIN0V2", 0x4001044, 2)
+    MakeReg("REG_WIN1V2", 0x4001046, 2)
+    MakeReg("REG_WININ2", 0x4001048, 2)
+    MakeReg("REG_WINOUT2", 0x400104a, 2)
+    MakeReg("REG_MOSAIC2", 0x400104c, 2)
+    MakeReg("REG_BLDCNT2", 0x4001050, 2)
+    MakeReg("REG_BLDY2", 0x4001054, 2)
+
+def MakeVMemRegs():
+    MakeReg("REG_VMEM_PAL_BG_FB1", 0x05000000, 2, 0x200)
+    MakeReg("REG_VMEM_PAL_FG_FB1", 0x05000200, 2, 0x200)
+    MakeReg("REG_VMEM_PAL_BG_FB2", 0x05000400, 2, 0x200)
+    MakeReg("REG_VMEM_PAL_FG_FB2", 0x05000600, 2, 0x200)
+    MakeReg("REG_VMEM_BankCnt", 0x04000240, 2)
+
+def MakeJoypadRegs():
+    MakeReg("REG_JP_KeyInput", 0x04000130, 2)
+    MakeReg("REG_JP_KeyCnt", 0x04000132, 2)    
+
+def MakeSystemRegs():
+    MakeReg("REG_Sys_WaitCnt", 0x04000204, 2)
+    MakeReg("REG_Sys_IME", 0x04000208, 2)
+    MakeReg("REG_Sys_IE", 0x04000210, 4)
+    MakeReg("REG_Sys_IF", 0x04000214, 4)
+    MakeReg("REG_Sys_HaltCnt", 0x04000230, 2)
+
+def MakeARM7Regs():
+    MakeReg("REG_ARM7_PowerCnt", 0x04000304, 2)
+    MakeReg("REG_ARM7_SPI_CR", 0x040001C0, 2)
+    MakeReg("REG_ARM7_SPI_Data", 0x040001C2, 2)
+
+def MakeARM9Regs():
+    MakeReg("REG_ARM9_PowerCnt", 0x04000308, 2)
 
 def accept_file(li, n):
     ndsRom = NintendoDSRom(li.read(li.size()))
@@ -736,6 +848,8 @@ def load_file(li, neflags, format):
         [ 0x02000000, 0x02800000, "SEG1" ],
         [ 0x037F8000, 0x037FFFFF, "SEG2" ],
         [ 0x03800000, 0x0380FFFF, "SEG3" ],
+        [ 0x04000000, 0x04001056, "General_Regs"],
+        [ 0x05000000, 0x05000600, "VMEM_Regs"],
     ]
 
     if ((startEA < memory[0][0] or endEA > memory[0][1]) and (startEA < memory[1][0] or endEA > memory[1][1]) and (startEA < memory[2][0] or endEA > memory[2][1])):
@@ -752,21 +866,33 @@ def load_file(li, neflags, format):
     for segment in memory:
         idc.AddSeg(segment[0], segment[1], 0, 1, idaapi.saRelPara, idaapi.scPub)
         idc.RenameSeg(segment[0], segment[2])
-        #memset_seg(segment[0], segment[1] - segment[0])
-        idc.SetSegmentType(segment[0], idc.SEG_CODE)
-    
+
+        if "SEG" not in segment[2]:
+            idc.SetSegmentType(segment[0], idc.SEG_DATA)
+            for i in xrange(segment[0], segment[1]):
+		        idc.PatchByte(i, 0)
+        else:
+            idc.SetSegmentType(segment[0], idc.SEG_CODE)
+
     li.seek(0)
     li.file2base(offset, startEA, endEA, 1)
 
-
-
     idaapi.cvar.inf.startCS = 0
     idaapi.cvar.inf.startIP = entryAddr
-
+    
     idc.ExtLinA(entryAddr, 1,  "; Title : " + str(ndsRom.name))
     idc.ExtLinA(entryAddr, 1,  "; Software Version: " + str(ndsRom.version))
 
     # Add TwlHdr
+    MakeVideoRegs()
+    MakeVMemRegs()
+    MakeJoypadRegs()
+    MakeSystemRegs()
+    if name == "ARM7 ROM":
+        MakeARM7Regs()
+    else:
+        MakeARM9Regs()
 
     print("Done! Entry point @ " + hex(entryAddr))
     return 1
+
